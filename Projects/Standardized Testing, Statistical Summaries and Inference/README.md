@@ -1,21 +1,11 @@
-[Project 1](./code/SAT-ACT-Analysis-Michael_Knight.ipynb)
 
-#  Project 1: Standardized Testing, Statistical Summaries and Inference
+# Standardized Testing, Statistical Summaries and Inference
 
 
-#### Overview
-
-This project covers use of:
-- basic statistics (distributions, confidence intervals, hypothesis testing)
-- many Python programming concepts
-- programmatically interacting with files and directories
-- visualizations
-- EDA
-- working with Jupyter notebooks for development and reporting
 
 ### Problem Statement
 
-In this project, I looked over aggregate SAT and ACT scores and participation rates from each state in the United States for 2017 and 2018. I sought to identify trends in the data and combine my data analysis with outside research to identify likely factors influencing participation rates and scores in various states.
+I looked over aggregate SAT and ACT scores and participation rates from each state in the United States for 2017 and 2018. I sought to identify trends in the data and combine my data analysis with outside research to identify likely factors influencing participation rates and scores in various states.
 
 ### Executive Summary
 
@@ -35,7 +25,7 @@ My approach was to import all of the data for the 2017 and 2018 SAT and ACT scor
 
 #### Provided Data
 
-For this project, I utilized the following datasets:
+I utilized the following datasets:
 
 - [2017 SAT Scores](./data/sat_2017.csv)
 - [2017 ACT Scores](./data/act_2017.csv)

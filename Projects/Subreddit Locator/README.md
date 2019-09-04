@@ -1,4 +1,4 @@
-[Project 3](https://git.generalassemb.ly/MichaelKnight4714/Submissions/commit/c88a13cb8c58572dfa1ad9dc7231c340901cbf6e)
+
 
 # Subreddit APIs & Classification
 
@@ -34,4 +34,4 @@ Setting my X-value to be the text (comprised of both title and selftext of each 
 Using the Random Forrest model over 100 n_estimators, through a gridsearch testing over parameters of 8, 10 and 12 for 'min_samples_split' and 50, 75, and 100 for 'max_depth', the training score was about 89% and the testing score was about 82%.  Using the Multinomial Naive Bayes model with the built in parameters, the training score was 89% and the testing score was 84%.  Both models worked fairly well, and almost equally accurately, with the Random Forrest Model being just a hair overfit and weaker than the Multinomial Naive Bayes model.  I think that, had I munged the data a little more thoroughly, and perhaps gotten more scraping done, I could have improved the models.
 
 
-#####Framework for this readme was taken from the spectacular Josh Robin
+
