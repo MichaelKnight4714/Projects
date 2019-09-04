@@ -1,6 +1,5 @@
-[Project 2](./code/Project_2_Ames_Housing_-FINAL_DRAFT-Michael.ipynb)
 
-# Project 2 - Ames Housing Data and Kaggle Challenge
+# Ames Housing Data and Kaggle Challenge
 
 
 #### Overview
