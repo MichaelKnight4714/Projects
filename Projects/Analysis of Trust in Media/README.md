@@ -5,7 +5,7 @@
 
 #### Overview
 
-An R script that details _.
+An R script that details the analysis of where and how people get their news, and what can potentially be inferred from this information.
 
 ### Problem Statement
 
