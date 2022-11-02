@@ -1,0 +1,569 @@
+---
+title: "Research_Team_2_Progress_Update_Report_Knight"
+author: "Michael Knight"
+date: "11/21/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(tidyverse)
+library(Hmisc)
+library(dplyr)
+library(tidyverse)
+```
+
+## Importing and Formatting the data
+
+
+
+```{r, echo=FALSE }
+atp_as_factor <- read_sav("ATP W14.sav", 
+                    user_na = TRUE) %>%
+  as_factor()
+
+atp_as_factor
+#View(atp_as_factor)
+
+labelsdf <- setNames(stack(lapply(atp_as_factor, label))[2:1], c("Varcode", "Variables"))
+View(labelsdf)
+```
+
+## Rename The Columns We will be Observing
+
+```{r}
+
+# previously used
+names(atp_as_factor)[names(atp_as_factor) == 'NEWS_PREFER_W14'] <- 'News_Preference' # Which of the following would you say you prefer for getting news?
+                                                                                    # variables: TV, Radio, Newspaper, Social Media, News Site/App
+                                                                                    
+# previously used
+names(atp_as_factor)[names(atp_as_factor) == 'DEBBOTH2_W14'] <- 'Debate_Preference' # Did you watch debates for both the Republican and Democratic candidates, 
+                                                                                    # or just one of the parties? 
+                                                                                    #variables: Rep, Dem, Both
+# previously used
+names(atp_as_factor)[names(atp_as_factor) == 'SOCTRUST_W14'] <- 'Trust_in_Others' # Generally speaking, would you say that most people can be trusted 
+                                                                                  # or that you can't be too careful in dealing with people?
+                                                                                # variables: Can't be too careful, Most people can be trusted
+# previously used
+# ???? rename 'Trust_in_social_media_news'? include trust in other news sources? (the other GROUP_TRUST's)
+names(atp_as_factor)[names(atp_as_factor) == 'GROUP_TRUSTD_W14'] <- 'Trust_in_social_media_news' # How much, if at all, do you trust the information you get from...?  
+                                                                                    # Social networking sites, such as Facebook and Twitter
+                                                                                    # variables: Not too much, Not at all, Some, A lot 
+# previously used
+names(atp_as_factor)[names(atp_as_factor) == 'DIGNEWSFACT_W14'] <- 'Fact_Check' # When you are online and come across information in a news story that you think is                                                                                           #inaccurate, how often do you take it upon yourself to figure out whether it is accurate?
+                                                                            #variables: "Never"=0, "Hardly ever"=1, "Sometimes"=2, "Often" = 3
+
+
+### previously unused
+names(atp_as_factor)[names(atp_as_factor) == 'F_PARTY_FINAL'] <- 'Party' # political party
+                                                                    # variables: Democrat, Something else, Republican, Independent
+### previously unused
+#NOW USED
+names(atp_as_factor)[names(atp_as_factor) == 'NEWS_PLATFORMG_W14'] <- 'How_often_social_media_for_news' # how often do you...Get news from a social networking site?
+                                                                    # variables: Sometimes, Never, Hardly ever, Often
+
+### previously unused
+#NOW USED
+names(atp_as_factor)[names(atp_as_factor) == 'GROUP_TRUSTA_W14'] <- 'Trust_in_natl_news_orgs' # How much, if at all, do you trust the information you get from...?  
+                                                                                    # National news organizations
+                                                                                    # variables: Not too much, Not at all, Some, A lot 
+
+
+
+# COMTRUST_W14 - Now thinking specifically about your local community, would you say that most people can be trusted or that you can't be too careful in dealing with people?
+# NEWS_TOPICA_W14 - How closely do you follow each type of news, either in the newspaper, on television, radio, or the internet?  Government and politics
+# NEWS_PLATFORMA_W14 - NEWS_PLATFORMA. And how often do you...Read any newspapers in print?
+### B-H: Listen to news on the radio?, Watch local television news?, Watch national evening network television news?, Watch cable television news (such as CNN, Fox News)?
+
+
+
+# look at measures of insulation/isolation?
+# NEWS_DISCUSS_W14 - How often do you discuss the news with others?
+# NEIGHBORS_W14 - Do you happen to know the names of your neighbors who live close by to you or no?
+# COMATTACH_W14 - In general, how attached do you feel to your local community?
+# COMTRUST_W14 - Now thinking specifically about your local community, would you say that most people can be trusted or that you can't be too careful in dealing with people?
+# NEWSSHARE_W14 - When you share a news story with others, what is the most common way you share it? (talk in person/by phone, social networking sites, email or text, In hard copy)
+atp_as_factor %>% 
+  select('News_Preference', 'Debate_Preference', 'Trust_in_Others', 'Trust_in_social_media_news', 'Fact_Check', 'Party', 'How_often_social_media_for_news', 'Trust_in_natl_news_orgs')
+
+
+```
+
+Define our variables (in a table)
+```{r}
+
+
+var_names <- c('News_Preference', 'Trust_in_Others', 'Trust_in_social_media_news', 'Fact_Check', 'How_often_social_media_for_news', 'Trust_in_natl_news_orgs')
+
+questions_asked <- c("Which of the following would you say you prefer for getting news?", 
+                     "Generally speaking, would you say that most people can be trusted or that you can't be too careful in dealing with people?", 
+                     "How much, if at all, do you trust the information you get from Social networking sites, such as Facebook and Twitter?", 
+                     "When you are online and come across information in a news story that you think is inaccurate, how often do you take it upon yourself to figure out whether it is accurate?", 
+                     "How often do you get news from a social networking site?", 
+                     "How much, if at all, do you trust the information you get from National news organizations?")
+
+answers <- c("TV, Radio, Newspaper, Social Media, News Site/App",
+             "Can't be too careful (0), Most people can be trusted (1)",
+             "Not at all (0), Not too much (1), Some (2), A lot (3)",
+             "Never (0), Hardly ever (1), Sometimes (2), Often (3)",
+             "Never (0), Hardly ever (1), Sometimes (2), Often (3)",
+             "Not at all (0), Not too much (1), Some (2), A lot (3)")
+
+variable_table.data <- data.frame(var_names, questions_asked, answers)
+
+
+#View(variable_table.data)
+
+variable_table.data
+
+write.csv(variable_table.data,"variable_table.csv", row.names = FALSE)
+
+
+
+```
+
+
+The hypotheses for this research are: 
+1. People who get their news from social media feel that most people in general cannot be trusted. 
+
+News_Preference vs. Trust_in_Others
+```{r}
+
+# 'News_Preference' # Which of the following would you say you prefer for getting news?
+                                                                                    # variables: TV, Radio, Newspaper, Social Media, News Site/App
+
+#'Trust_in_Others' Q: Generally speaking, would you say that most people can be trusted or that you can't be too careful in dealing with people?
+                                                                                # variables: Can't be too careful, Most people can be trusted
+
+# atp_as_factor %>% 
+#   select('News_Preference', 'How_often_social_media_for_news', 'Trust_in_Others')
+
+
+## 64 nulls for News_Preference
+#sum(is.na(atp_as_factor$News_Preference))
+## 0 nulls for Trust_in_Others
+#sum(is.na(atp_as_factor$Trust_in_Others))
+## 315 nulls for How_often_social_media_for_news
+#sum(is.na(atp_as_factor$How_often_social_media_for_news))
+
+
+#unique(atp_as_factor$News_Preference)
+#unique(atp_as_factor$Trust_in_Others)
+
+# only 26 instances where user refused to fill in answer for Trust_in_Others
+#sum(atp_as_factor$Trust_in_Others == "Refused")
+
+
+# Recode values
+atp_as_factor %>% 
+  select('Trust_in_Others', 'News_Preference') %>% 
+  mutate(Trust_in_Others = recode(Trust_in_Others,
+                                   "Can't be too careful" = 0,
+                                   "Most people can be trusted" = 1,
+                                   "Refused" = 2),
+         News_Preference = recode(News_Preference,
+                                   "Refused" = "N/A",
+                                   "Watching news on television" = "TV",
+                                   "Listening to news on the radio" = "Radio",
+                                  "Reading news in a print newspaper" = "Paper", 
+                                  "Getting news from a social networking site (such as Facebook or Twitter)" = "Social Media",
+                                  "Getting news from a news website or app" = "News Site/App")) -> social_med_vs_trusts_people
+
+
+#drop 64 rows that had null value for News_Preference (out of 4,654 total entries)
+social_med_vs_trusts_people <- na.omit(social_med_vs_trusts_people)
+
+
+# notice that after dropping the null values, there are 23 entries where there was a refusal to answer Trust others
+#sum(social_med_vs_trusts_people$Trust_in_Others == 2)
+
+# drop the 23 entries where people refused to answer the trust question
+social_med_vs_trusts_people %>% 
+  filter(Trust_in_Others != 2) -> social_med_vs_trusts_people
+#sum(social_med_vs_trusts_people$Trust_in_Others == 2)
+
+
+social_med_vs_trusts_people %>% 
+  group_by(News_Preference) %>% 
+  summarise(mean_trust = mean(Trust_in_Others)) %>%
+  ggplot(aes(x=News_Preference, y=mean_trust, fill = News_Preference)) + 
+  geom_col() +
+  xlab("Preferred Method of News Intake") + 
+  ylab("Average Amount of Trust In Others") +
+  ggtitle("Average Amount of Trust In Others by Prefered Method of Getting News") + 
+  theme_bw() +
+  theme(legend.position="none")
+
+```
+
+Hypothesis 1 pt 2
+How_often_social_media_for_news vs. Trust_in_Others
+```{r}
+
+# 'How_often_social_media_for_news' # how often do you...Get news from a social networking site?
+                                                                    # variables: Sometimes, Never, Hardly ever, Often
+
+
+#'Trust_in_Others' Q: Generally speaking, would you say that most people can be trusted or that you can't be too careful in dealing with people?
+                                                                                # variables: Can't be too careful, Most people can be trusted
+
+# atp_as_factor %>% 
+#   select('News_Preference', 'How_often_social_media_for_news', 'Trust_in_Others')
+
+
+## 0 nulls for Trust_in_Others
+#sum(is.na(atp_as_factor$Trust_in_Others))
+## 315 nulls for How_often_social_media_for_news
+#sum(is.na(atp_as_factor$How_often_social_media_for_news))
+
+
+unique(atp_as_factor$How_often_social_media_for_news)
+#unique(atp_as_factor$Trust_in_Others)
+
+# only 26 instances where user refused to fill in answer for Trust_in_Others
+#sum(atp_as_factor$Trust_in_Others == "Refused")
+# only 26 instances where user refused to fill in answer for How_often_social_media_for_news
+sum(atp_as_factor$How_often_social_media_for_news == "Sometimes")
+#atp_as_factor$How_often_social_media_for_news# == "Refused"
+
+
+# Recode values
+atp_as_factor %>% 
+  select('Trust_in_Others', 'How_often_social_media_for_news') %>% 
+  mutate(Trust_in_Others = recode(Trust_in_Others,
+                                   "Can't be too careful" = 0,
+                                   "Most people can be trusted" = 1,
+                                   "Refused" = 2))-> social_med_freq_vs_trusts_people #,
+         # How_often_social_media_for_news = recode(How_often_social_media_for_news,
+         #                           "Never" = 0,
+         #                           "Hardly ever" = 1,
+         #                           "Sometimes" = 2,
+         #                          "Often" = 3, 
+         #                          "Refused" = 4)) -> social_med_freq_vs_trusts_people
+
+
+#drop 315 rows that had null value for How_often_social_media_for_news (out of 4,654 total entries)
+social_med_freq_vs_trusts_people <- na.omit(social_med_freq_vs_trusts_people)
+
+unique(social_med_freq_vs_trusts_people$How_often_social_media_for_news)
+
+# notice that after dropping the null values, there are 27 entries where there was a refusal to answer Trust others
+sum(social_med_freq_vs_trusts_people$Trust_in_Others == 2)
+#notice that after dropping the null values, there is 1 entry where there was a refusal to answer 
+sum(social_med_freq_vs_trusts_people$How_often_social_media_for_news == "Refused")
+
+#unique(social_med_freq_vs_trusts_people$Trust_in_Others)
+
+# drop the 28 entries where people refused to answer the trust question and How_often_social_media_for_news
+social_med_freq_vs_trusts_people %>% 
+  filter(Trust_in_Others != 2 & How_often_social_media_for_news != "Refused") -> social_med_freq_vs_trusts_people
+#sum(social_med_freq_vs_trusts_people$Trust_in_Others == 2)
+
+
+social_med_freq_vs_trusts_people %>% 
+  group_by(How_often_social_media_for_news) %>% 
+  summarise(mean_trust = mean(Trust_in_Others)) %>%
+  ggplot(aes(x=How_often_social_media_for_news, y=mean_trust, fill = How_often_social_media_for_news)) + 
+  geom_col() +
+  xlab("Frequency of Social Media as News Intake") + 
+  ylab("Average Amount of Trust In Others") +
+  ggtitle("Average Amount of Trust In Others by Frequency of Social Media as News Intake") + 
+  theme_bw() +
+  theme(legend.position="none")
+
+```
+
+
+
+
+
+
+
+Hypothesis 2: People who get their news from social media feel that most national news orgs cannot be trusted.
+News_Preference vs. Trust_in_natl_news_orgs
+```{r}
+
+#'Trust_in_natl_news_orgs' Q:  How much, if at all, do you trust the information you get from National news organizations?
+                                                                                # variables: Not too much, Not at all, Some, A lot 
+
+# atp_as_factor %>% 
+#   select('News_Preference', 'How_often_social_media_for_news', 'Trust_in_Others')
+
+
+## 26 nulls for News_Preference
+#sum(is.na(atp_as_factor$News_Preference))
+## 0 nulls for Trust_in_natl_news_orgs
+#sum(is.na(atp_as_factor$Trust_in_natl_news_orgs))
+
+
+
+#unique(atp_as_factor$News_Preference)
+unique(atp_as_factor$Trust_in_natl_news_orgs)
+
+# only 26 instances where user refused to fill in answer for Trust_in_Others
+sum(atp_as_factor$Trust_in_Others == "Refused")
+
+
+# Recode values
+atp_as_factor %>% 
+  select('Trust_in_natl_news_orgs', 'News_Preference') %>% 
+  mutate(Trust_in_natl_news_orgs = recode(Trust_in_natl_news_orgs,
+                                   "Not at all" = 0,
+                                   "Not too much" = 1,
+                                   "Some" = 2,
+                                   "A lot" = 3,
+                                   "Refused" = 4),
+         News_Preference = recode(News_Preference,
+                                   "Refused" = "N/A",
+                                   "Watching news on television" = "TV",
+                                   "Listening to news on the radio" = "Radio",
+                                  "Reading news in a print newspaper" = "Paper", 
+                                  "Getting news from a social networking site (such as Facebook or Twitter)" = "Social Media",
+                                  "Getting news from a news website or app" = "News Site/App")) -> social_med_vs_trusts_natl_news_orgs
+
+
+#drop 64 rows that had null value for News_Preference (out of 4,654 total entries)
+social_med_vs_trusts_natl_news_orgs <- na.omit(social_med_vs_trusts_natl_news_orgs)
+
+
+# notice that after dropping the null values, there are 9 entries where there was a refusal to answer Trust_in_natl_news_orgs
+#sum(social_med_vs_trusts_natl_news_orgs$Trust_in_natl_news_orgs == 4)
+
+# drop the 9 entries where people refused to answer the trust question
+social_med_vs_trusts_natl_news_orgs %>% 
+  filter(Trust_in_natl_news_orgs != 4) -> social_med_vs_trusts_natl_news_orgs
+#sum(social_med_vs_trusts_people$Trust_in_Others == 4)
+
+
+social_med_vs_trusts_natl_news_orgs %>% 
+  group_by(News_Preference) %>% 
+  summarise(mean_trust = mean(Trust_in_natl_news_orgs)) %>%
+  ggplot(aes(x=News_Preference, y=mean_trust, fill = News_Preference)) + 
+  geom_col() +
+  xlab("Preferred Method of News Intake") + 
+  ylab("Avg Amt of Trust In National News Orgs") +
+  ggtitle("Avg Amt of Trust In National News Orgs by Prefered Method of Getting News") + 
+  theme_bw() +
+  theme(legend.position="none")
+
+```
+
+
+Hypothesis 2 pt 2
+How_often_social_media_for_news vs. Trust_in_natl_news_orgs
+```{r}
+
+# 'How_often_social_media_for_news' # how often do you...Get news from a social networking site?
+                                                                    # variables: Sometimes, Never, Hardly ever, Often
+
+
+#'Trust_in_natl_news_orgs' Q:  How much, if at all, do you trust the information you get from National news organizations?
+                                                                                # variables: Not too much, Not at all, Some, A lot 
+
+# atp_as_factor %>% 
+#   select('News_Preference', 'How_often_social_media_for_news', 'Trust_in_Others')
+
+
+## 0 nulls for Trust_in_natl_news_orgs
+#sum(is.na(atp_as_factor$Trust_in_natl_news_orgs))
+## 315 nulls for How_often_social_media_for_news
+#sum(is.na(atp_as_factor$How_often_social_media_for_news))
+
+
+#unique(atp_as_factor$How_often_social_media_for_news)
+#unique(atp_as_factor$Trust_in_natl_news_orgs)
+
+# only 26 instances where user refused to fill in answer for Trust_in_Others
+#sum(atp_as_factor$Trust_in_Others == "Refused")
+# only 26 instances where user refused to fill in answer for How_often_social_media_for_news
+sum(atp_as_factor$How_often_social_media_for_news == "Sometimes")
+#atp_as_factor$How_often_social_media_for_news# == "Refused"
+
+
+# Recode values
+atp_as_factor %>% 
+  select('Trust_in_natl_news_orgs', 'How_often_social_media_for_news') %>% 
+  mutate(Trust_in_natl_news_orgs = recode(Trust_in_natl_news_orgs,
+                                   "Not at all" = 0,
+                                   "Not too much" = 1,
+                                   "Some" = 2,
+                                   "A lot" = 3,
+                                   "Refused" = 4))-> social_med_freq_vs_natl_news_orgs #,
+         # How_often_social_media_for_news = recode(How_often_social_media_for_news,
+         #                           "Never" = 0,
+         #                           "Hardly ever" = 1,
+         #                           "Sometimes" = 2,
+         #                          "Often" = 3, 
+         #                          "Refused" = 4)) -> social_med_freq_vs_trusts_people
+
+
+#drop 315 rows that had null value for How_often_social_media_for_news (out of 4,654 total entries)
+social_med_freq_vs_natl_news_orgs <- na.omit(social_med_freq_vs_natl_news_orgs)
+
+unique(social_med_freq_vs_natl_news_orgs$How_often_social_media_for_news)
+
+# notice that after dropping the null values, there are 6 entries where there was a refusal to answer Trust others
+sum(social_med_freq_vs_natl_news_orgs$Trust_in_natl_news_orgs == 4)
+#notice that after dropping the null values, there is 1 entry where there was a refusal to answer 
+sum(social_med_freq_vs_natl_news_orgs$How_often_social_media_for_news == "Refused")
+
+#unique(social_med_freq_vs_natl_news_orgs$Trust_in_Others)
+
+# drop the 7 entries where people refused to answer the trust question and How_often_social_media_for_news
+social_med_freq_vs_natl_news_orgs %>% 
+  filter(Trust_in_natl_news_orgs != 4 & How_often_social_media_for_news != "Refused") -> social_med_freq_vs_natl_news_orgs
+#sum(social_med_freq_vs_natl_news_orgs$Trust_in_Others == 2)
+
+
+social_med_freq_vs_natl_news_orgs %>% 
+  group_by(How_often_social_media_for_news) %>% 
+  summarise(mean_trust = mean(Trust_in_natl_news_orgs)) %>%
+  ggplot(aes(x=How_often_social_media_for_news, y=mean_trust, fill = How_often_social_media_for_news)) + 
+  geom_col() +
+  xlab("Frequency of Social Media as News Intake") + 
+  ylab("Avg Amt of Trust In National News Orgs") +
+  ggtitle("Avg Amt of Trust In National News Orgs by Frequency of Social Media as News Intake") + 
+  theme_bw() +
+  theme(legend.position="none")
+
+```
+
+
+
+
+
+
+
+
+2. Most people who prefer to get their news from social media only watched either the republican or only the democratic debates.
+
+```{r}
+
+# 64 null entries
+#sum(is.na(atp_as_factor$News_Preference))
+# 2532 null entries! I recommend we not do this hypothesis
+#sum(is.na(atp_as_factor$Debate_Preference))
+
+#unique(atp_as_factor$News_Preference)
+#unique(atp_as_factor$Debate_Preference)
+
+# recode variables to be less long and clunky
+atp_as_factor %>% 
+  select('News_Preference', 'Debate_Preference') %>% 
+  mutate(Debate_Preference = recode(Debate_Preference,
+                                   "Debates for both party's candidates" = "Both",
+                                   "Debates for the Republican party's candidate" = "Rep",
+                                   "Debates for the Democratic party's candidate" = "Dem",
+                                   "Refused" = "N/A"),
+         News_Preference = recode(News_Preference,
+                                   "Refused" = "N/A",
+                                   "Watching news on television" = "TV",
+                                   "Listening to news on the radio" = "Radio",
+                                  "Reading news in a print newspaper" = "Paper", 
+                                  "Getting news from a social networking site (such as Facebook or Twitter)" = "Social Media",
+                                  "Getting news from a news website or app" = "News Site/App")) -> debates_only_one_party
+
+
+#drop 2532 rows that had null value for Trusts_in_others (out of 4,654 total entries)
+debates_only_one_party <- na.omit(debates_only_one_party)
+
+
+# hypothesis clearly very false
+debates_only_one_party %>% 
+  filter(News_Preference == "Social Media") %>% 
+  ggplot() + 
+  geom_bar(aes(x=Debate_Preference, y=stat(prop), group = 1)) + 
+  xlab("Which Parties' Debates Watched") +
+  ylab("Proportion") +
+  ggtitle("Proportion of Debates Watched By People Who Get News From Social Media") + 
+  theme_bw()
+
+```
+
+3. People who do not trust the news they see online are more likely to fact check.
+```{r}
+
+# 315 null values
+sum(is.na(atp_as_factor$Trust_in_social_media_news))
+# 580 null values
+sum(is.na(atp_as_factor$Fact_Check))
+
+
+# unique(atp_as_factor$Trust_in_social_media_news)
+# unique(atp_as_factor$Fact_Check)
+# 
+# atp_as_factor %>% 
+#   select('Trust_in_social_media_news', 'Fact_Check')
+# atp_numerical %>% 
+#   select('Trust_in_social_media_news', 'Fact_Check')
+
+atp_as_factor %>% 
+  select('Trust_in_social_media_news', 'Fact_Check') %>% 
+  mutate(Fact_Check = recode(Fact_Check,
+                                   "Never" = 0,
+                                   "Hardly ever" = 1,
+                                   "Sometimes" = 2,
+                                   "Often" = 3,
+                                   "Refused" = 4),
+         Trust_in_social_media_news = recode(Trust_in_social_media_news,
+                                   "Not at all" = 0,
+                                   "Not too much" = 1,
+                                   "Some" = 2,
+                                  "A lot" = 3, 
+                                  "Refused" = 4)) -> news_trust_v_fact_check_numerical
+
+
+news_trust_v_fact_check_numerical <- na.omit(news_trust_v_fact_check_numerical)
+
+# only 10 values where Refused to answer about Fact Checking
+#sum(news_trust_v_fact_check_numerical$Fact_Check == 4)
+
+# only 20 values where Refused to answer about Trust_in_News
+#sum(news_trust_v_fact_check_numerical$Trust_in_News == 4)
+
+# drop the  entries where people refused to answer the trust question and the fact check question
+news_trust_v_fact_check_numerical %>% 
+  filter(Trust_in_social_media_news != 4 & Fact_Check != 4) -> news_trust_v_fact_check_numerical
+
+
+
+cor(news_trust_v_fact_check_numerical)
+
+
+atp_as_factor %>% 
+  select('Trust_in_social_media_news', 'Fact_Check') -> news_trust_v_fact_check_as_factor
+
+news_trust_v_fact_check_as_factor <- na.omit(news_trust_v_fact_check_as_factor)
+
+# only 10 values where Refused to answer about Fact Checking
+#sum(news_trust_v_fact_check_as_factor$Fact_Check == "Refused")
+
+# only 20 values where Refused to answer about Trust_in_social_media_news
+#sum(news_trust_v_fact_check_as_factor$Trust_in_social_media_news == "Refused")
+
+
+
+# drop the  entries where people refused to answer the trust question and the fact check question
+news_trust_v_fact_check_as_factor %>% 
+  filter(Trust_in_social_media_news != "Refused" & Fact_Check != "Refused") -> news_trust_v_fact_check_as_factor
+
+#news_trust_v_fact_check_as_factor
+
+# hypothesis inconclusive
+news_trust_v_fact_check_as_factor %>% 
+  ggplot() + 
+  geom_bar(aes(x=Fact_Check, y=stat(prop), group = 1)) + 
+  facet_wrap("Trust_in_social_media_news") +
+  xlab("How Often Fact Check") +
+  ylab("Proportion") +
+  ggtitle("Proportion of Fact Checking by How Much People Trust Social Media News") +
+  theme_bw()
+
+
+
+
+```
+
+
