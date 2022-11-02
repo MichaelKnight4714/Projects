@@ -1,0 +1,1636 @@
+---
+title: "Final_Project_Wine_Quality"
+author: "Michael Knight"
+date: "6/18/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(neighbr) # for KNN
+library(leaps) # for regsubsets() and related functions
+library(e1071) # for svm and bayes classifier
+library(ROCR)  # AUC
+library(pspline) # for pspline
+library(glmnet) # for Ridge Regression and Lasso functions
+library(MASS) # Modern Applied Statistics with S package - has LDA and QDA
+library(GGally) # scatterplot matrices
+library(broom)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+I am using the Wine Quality Data Set (https://archive.ics.uci.edu/ml/datasets/Wine+Quality) for both my regression and classification model sets.
+
+```{r}
+#red_wine <- read.csv("winequality-red.csv", sep=";", header=T)
+
+white_wine <- read.csv("winequality-white.csv", sep=";",header=T)
+```
+
+
+For each of the Regression and Classification tasks, complete the following:
+2. Prepare your data set(s):
+(a) Briefly define the variables in the data set and the overall goal of your analysis. Clearly
+identify the response variable and predictor variables in your data set. Identify whether these are
+quantitative or categorical. State if this corresponds to a regression or classification setting and
+why.
+```{r}
+colnames(white_wine)
+```
+
+
+
+(b) Remove any observations that have missing values on any variables. Treat the remaining
+observations as your full (complete cases) data set. How many observations did you remove?
+What is the sample size of your remaining full data set?
+
+```{r}
+#red_wine <- read.csv("winequality-red.csv", sep=";", header=T)
+
+white_wine <- read.csv("winequality-white.csv", sep=";",header=T)
+
+
+#apply(is.na(red_wine),2,sum) # no missing values
+apply(is.na(white_wine),2,sum) # no missing values
+
+# add a qualitative version of the quality variable, to be used for the classification models
+#red_wine$quality.factor <- as.factor(red_wine$quality)
+white_wine$quality.factor <- as.factor(white_wine$quality)
+
+# add a qualitative factor of quality as a binary 'good/bad' where 0=bad, 1=good
+quality.good <- rep(0, length(white_wine$quality))
+quality.good[white_wine$quality > 5] <- 1
+white_wine <- data.frame(white_wine, quality.good)
+white_wine$quality.good <- as.factor(white_wine$quality.good)
+
+
+# quality.good <- rep(0, length(red_wine$quality))
+# quality.good[red_wine$quality > 5] <- 1
+# red_wine <- data.frame(red_wine, quality.good)
+
+ 
+#red_wine <- na.omit(red_wine)
+
+white_wine <- na.omit(white_wine)
+
+#nrow(red_wine)
+
+nrow(white_wine)
+```
+
+Ans: There were 0 null valuations, hence no observations required removal.
+
+(c) Randomly select a test data set that is approximately 10% of your full data set. Separate this
+out from your full data set. Treat the remaining 90% of your data set as your training data.
+```{r}
+set.seed(20) # for reproducibility 
+
+# red wine
+#n <- length(red_wine$quality) 
+#Z <- sample(n,n*0.9) 
+#train.red <- red_wine[sort(Z),] 
+#test.red <- red_wine[-sort(Z),]
+
+# 1st 6 observations of training data
+#head(train.red)
+#nrow(train.red)
+
+# 1st 6 observations of testing data
+#head(test.red)
+#nrow(test.red)
+
+
+# white wine
+n <- length(white_wine$quality) 
+Z <- sample(n,n*0.9) 
+train.white <- white_wine[sort(Z),] 
+test.white <- white_wine[-sort(Z),]
+
+# 1st 6 observations of training data
+head(train.white)
+nrow(train.white)
+
+# 1st 6 observations of testing data
+head(test.white)
+nrow(test.white)
+
+```
+
+
+3. Identify and conduct your analysis on the training data:
+(a) Conduct an exploratory data analysis on your training data and briefly summarize any interesting features of your data set.
+```{r}
+#summary(train.red)
+summary(train.white)
+```
+
+Ans: It is interesting to me that for red wines, there are no wines with a rating less then 3 (and there were only 10 reds with a rating of 3) and no reds with a rating higher than 8 (and there were only 16 wines with a rating of 8), and that for white wines, there are no wines with a rating less then 3 (and there were only 19 white with a rating of 3) and no whites with a rating higher than 9 (and there were only 5 wines with a rating of 9).
+
+
+Checking for multicolinearity:
+```{r}
+ggpairs(data = train.white) # we see a 0.833 correlation between density and residual.sugars, so we will want to drop one of those variables
+
+# note that Correlation coefficients whose magnitude are between 0.9 and 1.0 indicate variables which can be considered very highly correlated. Correlation coefficients whose magnitude are between 0.7 and 0.9 indicate variables which can be considered highly correlated. All other correlations in this matrix are  smaller then 0.7
+```
+
+since residual sugar would determine how sweet a wine is, and since a wine can only be so dense, I decided to remove density from my MLR model (and any other models where non-multicolinearity was an assumption).
+
+```{r}
+checkfullmodel <- lm(quality ~ . - quality.factor - quality.good, data = train.white) 
+tidycheck <- tidy(checkfullmodel) 
+tidycheck
+```
+
+
+```{r}
+plot(train.white$residual.sugar, train.white$density)
+```
+
+
+Scatter Plots of residual vs fitted for train.white
+```{r}
+plot(jitter(train.white$fixed.acidity), train.white$quality)
+points(train.white$fixed.acidity, loess(train.white$quality~train.white$fixed.acidity)$fitted, pch=19)
+
+plot(jitter(train.white$volatile.acidity), train.white$quality)
+points(train.white$volatile.acidity, loess(train.white$quality~train.white$volatile.acidity)$fitted, pch=19)
+
+plot(jitter(train.white$citric.acid), train.white$quality)
+points(train.white$citric.acid, loess(train.white$quality~train.white$citric.acid)$fitted, pch=19)
+
+plot(jitter(train.white$residual.sugar), train.white$quality)
+points(train.white$residual.sugar, loess(train.white$quality~train.white$residual.sugar)$fitted, pch=19)
+
+
+plot(jitter(train.white$chlorides), train.white$quality)
+points(train.white$chlorides, loess(train.white$quality~train.white$chlorides)$fitted, pch=19)
+
+plot(jitter(train.white$free.sulfur.dioxide), train.white$quality)
+points(train.white$free.sulfur.dioxide, loess(train.white$quality~train.white$free.sulfur.dioxide)$fitted, pch=19)
+
+
+plot(jitter(train.white$total.sulfur.dioxide), train.white$quality)
+points(train.white$total.sulfur.dioxide, loess(train.white$quality~train.white$total.sulfur.dioxide)$fitted, pch=19)
+
+
+plot(jitter(train.white$density), train.white$quality)
+points(train.white$density, loess(train.white$quality~train.white$density)$fitted, pch=19)
+
+
+plot(jitter(train.white$pH), train.white$quality)
+points(train.white$pH, loess(train.white$quality~train.white$pH)$fitted, pch=19)
+
+
+plot(jitter(train.white$sulphates), train.white$quality)
+points(train.white$sulphates, loess(train.white$quality~train.white$sulphates)$fitted, pch=19)
+
+
+
+plot(jitter(train.white$alcohol), train.white$quality)
+points(train.white$alcohol, loess(train.white$quality~train.white$alcohol)$fitted, pch=19)
+
+
+```
+
+
+I am seeing some outliers that are clearly skewing the data for fixed.acidity, citric.acid, residual.sugar, free.sulfur.dioxide, and density.
+```{r}
+# Outlier deterction
+
+#max(train.white$free.sulfur.dioxide)
+
+train.white %>% 
+  filter(fixed.acidity >12) # one outlier
+
+train.white %>% 
+  filter(citric.acid >1.2) # two outliers
+
+train.white %>% 
+  filter(residual.sugar >35) # one outlier
+
+train.white %>% 
+  filter(free.sulfur.dioxide >250) # one outlier
+
+train.white %>% 
+  filter(density >1.01) # two outliers, but notice that one of these two points is the same wine with residual.sugar >35 
+
+
+
+```
+
+I will remove these six observations and re-examine the plots
+
+```{r}
+train.white %>% 
+  filter(fixed.acidity <12) %>% 
+  filter(citric.acid < 1.2) %>% 
+  filter(residual.sugar < 35) %>% 
+  filter(free.sulfur.dioxide < 250) %>% 
+  filter(density < 1.01) -> train.white
+
+nrow(train.white) # training set now has 4,403 observations
+  
+```
+
+Lets reobserve the graphs from before
+
+```{r} 
+# Lets reobserve the graphs from before
+
+plot(jitter(train.white$fixed.acidity), train.white$quality)
+points(train.white$fixed.acidity, loess(train.white$quality~train.white$fixed.acidity)$fitted, pch=19)
+
+plot(jitter(train.white$volatile.acidity), train.white$quality)
+points(train.white$volatile.acidity, loess(train.white$quality~train.white$volatile.acidity)$fitted, pch=19)
+
+plot(jitter(train.white$citric.acid), train.white$quality)
+points(train.white$citric.acid, loess(train.white$quality~train.white$citric.acid)$fitted, pch=19)
+
+plot(jitter(train.white$residual.sugar), train.white$quality)
+points(train.white$residual.sugar, loess(train.white$quality~train.white$residual.sugar)$fitted, pch=19)
+
+
+plot(jitter(train.white$chlorides), train.white$quality)
+points(train.white$chlorides, loess(train.white$quality~train.white$chlorides)$fitted, pch=19)
+
+plot(jitter(train.white$free.sulfur.dioxide), train.white$quality)
+points(train.white$free.sulfur.dioxide, loess(train.white$quality~train.white$free.sulfur.dioxide)$fitted, pch=19)
+
+
+plot(jitter(train.white$total.sulfur.dioxide), train.white$quality)
+points(train.white$total.sulfur.dioxide, loess(train.white$quality~train.white$total.sulfur.dioxide)$fitted, pch=19)
+
+
+plot(jitter(train.white$density), train.white$quality)
+points(train.white$density, loess(train.white$quality~train.white$density)$fitted, pch=19)
+
+
+plot(jitter(train.white$pH), train.white$quality)
+points(train.white$pH, loess(train.white$quality~train.white$pH)$fitted, pch=19)
+
+
+plot(jitter(train.white$sulphates), train.white$quality)
+points(train.white$sulphates, loess(train.white$quality~train.white$sulphates)$fitted, pch=19)
+
+
+
+plot(jitter(train.white$alcohol), train.white$quality)
+points(train.white$alcohol, loess(train.white$quality~train.white$alcohol)$fitted, pch=19)
+```
+
+
+plotting to see possible pattern between eash predictor and the binary classification response 'quality.good.' Curves Look somewhat similar to plotting when using regression response, a continuous variable focusing on 7 ratings of quality rather than 2  
+```{r}
+plot(train.white$fixed.acidity, train.white$quality.good, ylab = 'quality.good', xlab = 'fixed.acidity')
+points(train.white$fixed.acidity, loess(as.numeric(train.white$quality.good)~train.white$fixed.acidity)$fitted, pch=19)
+
+plot(train.white$volatile.acidity, train.white$quality.good, ylab = 'quality.good', xlab = 'volatile.acidity')
+points(train.white$volatile.acidity, loess(as.numeric(train.white$quality.good)~train.white$volatile.acidity)$fitted, pch=19)
+
+plot(train.white$citric.acid, train.white$quality.good, ylab = 'quality.good', xlab = 'citric.acid')
+points(train.white$citric.acid, loess(as.numeric(train.white$quality.good)~train.white$citric.acid)$fitted, pch=19)
+
+plot(train.white$residual.sugar, train.white$quality.good, ylab = 'quality.good', xlab = 'residual.sugar')
+points(train.white$residual.sugar, loess(as.numeric(train.white$quality.good)~train.white$residual.sugar)$fitted, pch=19)
+
+plot(train.white$chlorides, train.white$quality.good, ylab = 'quality.good', xlab = 'chlorides')
+points(train.white$chlorides, loess(as.numeric(train.white$quality.good)~train.white$chlorides)$fitted, pch=19)
+
+plot(train.white$free.sulfur.dioxide, train.white$quality.good, ylab = 'quality.good', xlab = 'free.sulfur.dioxide')
+points(train.white$free.sulfur.dioxide, loess(as.numeric(train.white$quality.good)~train.white$free.sulfur.dioxide)$fitted, pch=19)
+
+plot(train.white$total.sulfur.dioxide, train.white$quality.good, ylab = 'quality.good', xlab = 'total.sulfur.dioxide')
+points(train.white$total.sulfur.dioxide, loess(as.numeric(train.white$quality.good)~train.white$total.sulfur.dioxide)$fitted, pch=19)
+
+plot(train.white$density, train.white$quality.good, ylab = 'quality.good', xlab = 'density')
+points(train.white$density, loess(as.numeric(train.white$quality.good)~train.white$density)$fitted, pch=19)
+
+plot(train.white$pH, train.white$quality.good, ylab = 'quality.good', xlab = 'pH')
+points(train.white$pH, loess(as.numeric(train.white$quality.good)~train.white$pH)$fitted, pch=19)
+
+plot(train.white$sulphates, train.white$quality.good, ylab = 'quality.good', xlab = 'sulphates')
+points(train.white$sulphates, loess(as.numeric(train.white$quality.good)~train.white$sulphates)$fitted, pch=19)
+
+plot(train.white$alcohol, train.white$quality.good, ylab = 'quality.good', xlab = 'alcohol')
+points(train.white$alcohol, loess(as.numeric(train.white$quality.good)~train.white$alcohol)$fitted, pch=19)
+
+```
+
+Residual Plots
+
+MLR model Assumptions and tests:
+- Linearity; test by creating a scatterplot of residuals vs predictor variable and observing no structure or pattern
+- Independent Observations; test by looking at Scatterplot of residuals vs the predictor variable and observing that they don't show pattern -- Error terms Centered around zero
+- Normality of error terms; test by looking at a histogram of the residuals and see if there is a bell curve
+- Equal variances of error terms; test by observing Scatterplot of residuals vs fitted (or predictor variables) don’t show funneling
+- X is nonstochastic and rank(x) >> n; we know this for sure already because the x are not random and 4402 >> 11
+
+fixed acidity
+```{r}
+model <- lm(quality~(fixed.acidity), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+
+#durbinWatsonTest(model)
+```
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$fixed.acidity,train.white$quality,pch=19,xlab='fixed.acidity',ylab='Quality',main='White Wine fixed.acidity vs. Quality and estimated fits')
+lines(train.white$fixed.acidity,model$fitted.values,col='green',lwd=2) 
+```
+
+
+volatile.acidity before transformation
+```{r}
+model <- lm(quality~(volatile.acidity), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+volatile.acidity after transformation
+```{r}
+model <- lm(quality~log(volatile.acidity), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$volatile.acidity,train.white$quality,pch=19,xlab='volatile.acidity',ylab='Quality',main='White Wine volatile.acidity vs. Quality and estimated fits')
+lines(train.white$volatile.acidity,model$fitted.values,col='green',lwd=2) 
+```
+
+Citric Acid
+```{r}
+model <- lm(quality~citric.acid, data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$citric.acid,train.white$quality,pch=19,xlab='citric.acid',ylab='Quality',main='White Wine citric.acid vs. Quality and estimated fits')
+lines(train.white$citric.acid,model$fitted.values,col='green',lwd=2) 
+```
+
+residual.sugar before transformation
+```{r}
+model <- lm(quality~(residual.sugar), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+residual.sugar after transformation
+```{r}
+model <- lm(quality~poly(residual.sugar, 3), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$residual.sugar,train.white$quality,pch=19,xlab='residual.sugar',ylab='Quality',main='White Wine residual.sugar vs. Quality and estimated fits')
+lines(train.white$residual.sugar,model$fitted.values,col='green',lwd=2) 
+```
+
+chlorides before transformation
+```{r}
+model <- lm(quality~(chlorides), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+chlorides after transformation
+```{r}
+model <- lm(quality~poly(chlorides,6), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$chlorides,train.white$quality,pch=19,xlab='chlorides',ylab='Quality',main='White Wine chlorides vs. Quality and estimated fits')
+lines(train.white$chlorides,model$fitted.values,col='green',lwd=2) 
+```
+
+free.sulfur.dioxide before transformation
+```{r}
+model <- lm(quality~free.sulfur.dioxide, data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+free.sulfur.dioxide after transformation
+```{r}
+model <- lm(quality~poly(free.sulfur.dioxide, 3), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$free.sulfur.dioxide,train.white$quality,pch=19,xlab='free.sulfur.dioxide',ylab='Quality',main='White Wine free.sulfur.dioxide vs. Quality and estimated fits')
+lines(train.white$free.sulfur.dioxide,model$fitted.values,col='green',lwd=2) 
+```
+
+
+
+Total Sulfur Dioxide
+```{r}
+model <- lm(quality~(total.sulfur.dioxide), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$total.sulfur.dioxide,train.white$quality,pch=19,xlab='total.sulfur.dioxide',ylab='Quality',main='White Wine total.sulfur.dioxide vs. Quality and estimated fits')
+lines(train.white$total.sulfur.dioxide,model$fitted.values,col='green',lwd=2) 
+```
+
+
+Density; displaying more pattern than I am comfortable with, but no transformation I tried would fix it. It gets dropped for most of the modelling anyways
+```{r}
+model <- lm(quality~density, data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$density,train.white$quality,pch=19,xlab='density',ylab='Quality',main='White Wine density vs. Quality and estimated fits')
+lines(train.white$density,model$fitted.values,col='green',lwd=2) 
+```
+
+pH before transformation
+```{r}
+model <- lm(quality~(pH), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+pH after transformation
+```{r}
+model <- lm(quality~log(pH), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$pH,train.white$quality,pch=19,xlab='pH',ylab='Quality',main='White Wine pH vs. Quality and estimated fits')
+lines(train.white$pH,model$fitted.values,col='green',lwd=2) 
+```
+Sulphates before Transformation
+```{r}
+model <- lm(quality~(sulphates), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+Sulphates after Transformation
+```{r}
+model <- lm(quality~log(sulphates), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$sulphates,train.white$quality,pch=19,xlab='sulphates',ylab='Quality',main='White Wine sulphates vs. Quality and estimated fits')
+lines(train.white$sulphates,model$fitted.values,col='green',lwd=2) 
+```
+Alcohol before transformation
+```{r}
+model <- lm(quality~alcohol, data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+Alcohol After transformation
+```{r}
+model <- lm(quality~poly(alcohol,3), data=train.white)
+
+#get list of residuals 
+res <- resid(model)
+
+#produce residual vs. fitted plot
+plot(fitted(model), res)
+
+#add a horizontal line at 0 
+abline(0,0)
+
+# produce histogram of residuals
+hist(res)
+```
+
+
+
+Checking a graph of the model plotted against the scatterplot of the original data seems to confirm a pretty good fit. 
+```{r}
+
+plot(train.white$alcohol,train.white$quality,pch=19,xlab='alcohol',ylab='Quality',main='White Wine alcohol vs. Quality and estimated fits')
+lines(train.white$alcohol,model$fitted.values,col='green',lwd=2) 
+```
+
+
+
+Looking at the full model
+```{r}
+mlr.full <- lm(quality~ . - quality.good - quality.factor, data=train.white)
+
+sm.full <- summary(mlr.full)
+sm.full
+
+```
+
+Looking at the full model minus density - the Adjusted R-squared score goes down from 0.2765 to 0.2646, but it doesn't matter because if the previous model violated an assumption it is null.
+```{r}
+mlr.full <- lm(quality~ . - quality.good - quality.factor - density, data=train.white)
+
+sm.full <- summary(mlr.full)
+sm.full
+
+```
+
+
+
+
+Looking at the model after dropping density and transforming variables, we see the R2 adju went up from 0.2646 to 0.3095
+```{r}
+
+model.tranformed.full <- lm(quality~
+              fixed.acidity+
+              log(volatile.acidity)+
+              (citric.acid)+ 
+              poly(residual.sugar, 3)+ 
+              poly(chlorides,6)+ 
+              poly(free.sulfur.dioxide, 3)+ 
+              (total.sulfur.dioxide)+ 
+              log(pH)+ 
+              log(sulphates)+ 
+              poly(alcohol,3), 
+            data=train.white) 
+
+
+sm.trans.full <- summary(model.tranformed.full)
+sm.trans.full
+```
+
+
+
+(b) Identify the statistical learning methods you will use to address the overall goal of the analysis. At least one method for each data set analysis must be selected from those we covered in Chapters 6 through 12. Provide formal representation of the methods (such as a mathematical expression for a model or a description of how the method works/is fit) and identify any important components in your representation. Your methods must depend on some type of tuning parameter. Identify the tuning parameter for your methods.
+
+# Regression Models
+
+## Multiple Linear Regression Model with Best Subsets
+
+
+```{r}
+regfit.full <- regsubsets(quality ~ 
+                            fixed.acidity+
+              log(volatile.acidity)+
+              (citric.acid)+ 
+              poly(residual.sugar, 3)+ 
+              poly(chlorides,6)+ 
+              poly(free.sulfur.dioxide, 3)+ 
+              (total.sulfur.dioxide)+ 
+              log(pH)+ 
+              log(sulphates)+ 
+              poly(alcohol,3), 
+              data = train.white, nvmax = 21)
+reg.summary <- summary(regfit.full)
+reg.summary 
+
+```
+
+```{r}
+# the best subset model obtained according to the Cp criterion has 18 variables
+which.min(reg.summary$cp)  
+
+# coefficient table of estimates
+coef(regfit.full, 18)
+```
+
+```{r}
+# the best subset model obtained according to the BIC criterion has 12 variables
+which.min(reg.summary$bic) 
+
+# coefficient table of estimates
+coef(regfit.full, 12)
+```
+
+
+```{r}
+# the best subset model obtained according to the adjusted R2 criterion has 20 variables
+which.max(reg.summary$adjr2)
+
+# coefficient table of estimates
+coef(regfit.full, 20)
+```
+
+```{r}
+
+# the best subset model obtained according to the Cp criterion
+
+mlr.white.cp <- lm(quality~
+                  fixed.acidity+
+                  log(volatile.acidity)+
+                  poly(residual.sugar, 2)+
+                  poly(chlorides, 6) -
+                    chlorides^4 +
+                  poly(free.sulfur.dioxide, 3)+
+                  total.sulfur.dioxide+
+                    log(pH)+
+                  log(sulphates)+
+                  poly(alcohol,3), data = train.white)
+
+
+# the best subset model obtained according to the BIC criterion
+mlr.white.bic <- lm(quality~
+                  fixed.acidity+
+                  log(volatile.acidity)+
+                  poly(residual.sugar, 2)+
+                  poly(free.sulfur.dioxide, 3)+
+                  total.sulfur.dioxide+
+                  log(sulphates)+
+                  poly(alcohol,3), data = train.white)
+
+
+# the best subset model obtained according to the R2 adjusted criterion
+mlr.white.adjr2 <- lm(quality~
+                  fixed.acidity+
+                    citric.acid+
+                  log(volatile.acidity)+
+                  poly(residual.sugar, 3)+
+                  poly(chlorides, 6) -
+                    chlorides^4 +
+                  poly(free.sulfur.dioxide, 3)+
+                  total.sulfur.dioxide+
+                    log(pH)+
+                  log(sulphates)+
+                  poly(alcohol,3), data = train.white)
+
+
+sm.cp <- summary(mlr.white.cp)
+sm.bic <- summary(mlr.white.bic)
+sm.adjr2 <- summary(mlr.white.adjr2)
+
+# full original model adjusted r2 score
+sm.full$adj.r.squared
+# transformed model adjusted r2 score
+sm.trans.full$adj.r.squared
+
+
+# adjusted r2 scores for the best subset models obtained according to the Cp, BIC, and R2 adjusted criteria
+# cp
+sm.cp$adj.r.squared
+# bic
+sm.bic$adj.r.squared
+# adj r squared
+sm.adjr2$adj.r.squared
+
+
+```
+
+
+Train & Test MSE for MLR model fitted on full original, Train & Test MSE for MLR model fitted on regsubset. Not much change!
+```{r}
+
+# Train & Test MSE for MLR model fitted on full original
+mseTrainfull <- mean((train.white$quality-mlr.full$fitted)^2)
+yhat <- predict(mlr.full,newdata=test.white)
+mseTestfull <- mean((test.white$quality-yhat)^2)
+
+mseTrainfull 
+mseTestfull 
+
+
+# Train & Test MSE for MLR model fitted on regsubset with Cp as the criterion
+mlr.white.best <- mlr.white.cp
+
+
+mseTrainbest <- mean((train.white$quality-mlr.white.best$fitted)^2)
+ybesthat <- predict(mlr.white.best,newdata=test.white)
+mseTestbest <- mean((test.white$quality-ybesthat)^2)
+
+mseTrainbest
+mseTestbest
+
+
+# Train & Test MSE for MLR model fitted on regsubset with BIC as the criterion
+mlr.white.best <- mlr.white.bic
+
+
+mseTrainbest <- mean((train.white$quality-mlr.white.best$fitted)^2)
+ybesthat <- predict(mlr.white.best,newdata=test.white)
+mseTestbest <- mean((test.white$quality-ybesthat)^2)
+
+mseTrainbest
+mseTestbest
+
+
+# Train & Test MSE for MLR model fitted on regsubset with adjusted R2 score as the criterion
+mlr.white.best <- mlr.white.adjr2
+
+
+mseTrainbest <- mean((train.white$quality-mlr.white.best$fitted)^2)
+ybesthat <- predict(mlr.white.best,newdata=test.white)
+mseTestbest <- mean((test.white$quality-ybesthat)^2)
+
+mseTrainbest
+mseTestbest
+```
+Train & Test MSE for MLR model fitted on regsubset with Cp as the criterion had the best Test MSE score of 0.4487168
+Note that Having a lower test error score than a train error score, which happened with the MLR regressions, suggests overfitting.
+
+Summary of MLR model fitted on regsubset with Cp as the criterion
+```{r}
+sm.cp
+```
+
+
+## Shrinkage Methods (LASSO vs Ridge)
+
+### LASSO
+```{r}
+# format an x and y for the lasso model - since assumptions are the same as MLR, use the variable set up for the MLR models before performing best subsets
+
+#x.shrinkage <- model.matrix(quality ~ . - quality.good - quality.factor, train.white)[, -1] #throws out first column because its all 1's in the design matrix (all things want penalized)
+
+
+x.shrinkage <- model.matrix(quality ~ 
+                              fixed.acidity+
+              log(volatile.acidity)+
+              (citric.acid)+ 
+              poly(residual.sugar, 3)+ 
+              poly(chlorides,6)+ 
+              poly(free.sulfur.dioxide, 3)+ 
+              (total.sulfur.dioxide)+ 
+              log(pH)+ 
+              log(sulphates)+ 
+              poly(alcohol,3), train.white)[, -1] #throws out first column because its all 1's in the design matrix (all things want penalized)
+
+
+
+head(x.shrinkage) # removed intercept term
+
+y.shrinkage <- train.white$quality
+
+
+grid <- 10^seq(10,-2,length=100) # grid of lambda values goes from 10^10 down to 10^-2 = 0.01
+
+
+lasso.mod <- glmnet(x.shrinkage, y.shrinkage, alpha = 1, lambda = grid)   # alpha = 1 corresponds to lasso
+
+dim(coef(lasso.mod)) # 22 coefficients by 100 lambda values
+
+
+# We can use cross-validation to choose the tuning parameter.
+# By default this performs 10-fold cross-validation
+set.seed(1)
+cv.lasso.mod <- cv.glmnet(x.shrinkage, y.shrinkage, alpha = 1)  # alpha = 1 corresponds to lasso
+
+
+
+plot(cv.lasso.mod)
+cv.lasso.mod$lambda.min # lambda = 0.002073759
+cv.lasso.mod
+
+lassop <- predict(lasso.mod, s=cv.lasso.mod$lambda.min, type="coefficients" )
+lassop
+
+# train mse
+lasso.pred.y <- predict(lasso.mod, x.shrinkage, s=cv.lasso.mod$lambda.min, type = "class")
+train.mse.lasso <- mean((train.white$quality-lasso.pred.y)^2)
+train.mse.lasso
+
+
+# test mse
+#x.shrinkage.test <- model.matrix(quality ~ . - quality.good - quality.factor, test.white)[, -1]
+
+x.shrinkage.test <- model.matrix(quality ~ 
+                                   fixed.acidity+
+              log(volatile.acidity)+
+              (citric.acid)+ 
+              poly(residual.sugar, 3)+ 
+              poly(chlorides,6)+ 
+              poly(free.sulfur.dioxide, 3)+ 
+              (total.sulfur.dioxide)+ 
+              log(pH)+ 
+              log(sulphates)+ 
+              poly(alcohol,3), test.white)[, -1]
+
+lasso.pred.y <- predict(lasso.mod, x.shrinkage.test, s=cv.lasso.mod$lambda.min, type = "class")
+test.mse.lasso <- mean((test.white$quality-lasso.pred.y)^2)
+test.mse.lasso
+
+```
+Lasso Train MSE = 0.5442927
+Lasso Test MSE = 1.097064
+
+
+
+### Ridge
+```{r}
+# format an x and y for the ridge model
+#x.shrinkage <- model.matrix(quality ~ . - quality.good - quality.factor, train.white)[, -1] #throws out first column because its all 1's in the design matrix (all things want penalized)
+
+head(x.shrinkage) # removed intercept term
+
+y.shrinkage <- train.white$quality
+
+
+grid <- 10^seq(10,-2,length=100) # grid of lambda values goes from 10^10 down to 10^-2 = 0.01
+
+
+ridge.mod <- glmnet(x.shrinkage, y.shrinkage, alpha = 0, lambda = grid) # alpha = 0 corresponds to ridge
+
+
+dim(coef(ridge.mod)) # 22 coefficients by 100 lambda values
+
+# We can use cross-validation to choose the tuning parameter.
+# By default this performs 10-fold cross-validation
+set.seed(1)
+cv.ridge.mod <- cv.glmnet(x.shrinkage, y.shrinkage, alpha = 0)  # alpha = 0 corresponds to ridge
+
+
+plot(cv.ridge.mod) # needs to be tuned more, should be between two negative values
+cv.ridge.mod$lambda.min # lambda = 0.0379651
+cv.ridge.mod
+
+ridgep <- predict(ridge.mod, s=cv.ridge.mod$lambda.min, type="coefficients" )
+ridgep
+
+# train mse
+ridge.pred.y <- predict(ridge.mod, x.shrinkage, s=cv.ridge.mod$lambda.min, type = "class")
+train.mse.ridge <- mean((train.white$quality-ridge.pred.y)^2)
+train.mse.ridge
+
+# test mse
+#x.shrinkage.test <- model.matrix(quality ~ . - quality.good - quality.factor, test.white)[, -1]
+ridge.pred.y <- predict(ridge.mod, x.shrinkage.test, s=cv.ridge.mod$lambda.min, type = "class")
+test.mse.ridge <- mean((test.white$quality-ridge.pred.y)^2)
+test.mse.ridge
+```
+
+Ridge Train MSE = 0.5425599
+Ridge Test MSE = 1.116491
+
+Ridge Test MSE (1.116491) > Lasso Test MSE (1.097064), so Lasso Model was the better of the two shrinkage methods, with a lambda tuned to 0.002073759
+
+The optimized MLR Test MSE was 0.4487168, so of the two regression models, the MLR was the best.
+
+# Classification
+
+
+## SVM 
+```{r}
+
+
+# Tuning kernel and cost
+set.seed(100)
+rg <- list(kernel=c("linear","polynomial","radial","sigmoid"), cost=seq(1,3,.5))
+rg
+svmt <- tune(svm,quality.good ~ . - quality - quality.factor - density, data=train.white, ranges = rg)
+svmt # radial permorms best, with a cost of 3
+```
+radial permorms best, with a cost of 3
+
+
+```{r}
+svm.tuned <- svm(quality.good ~ . - quality - quality.factor- density, data= train.white,kernel="radial",cost=3)
+svm.tuned
+#plot(svm.tuned,College,Expend ~ S.F.Ratio)
+#plot(svm.tuned,College,F.Undergrad ~ Outstate)
+yhat = predict(svm.tuned) 
+table(yhat,train.white$quality.good)
+
+
+mean(yhat != train.white$quality.good) # Train error rate
+
+
+
+test.yhat <- predict(svm.tuned, test.white) 
+table(test.yhat,test.white$quality.good)
+
+mean(test.yhat != test.white$quality.good) # Test error rate
+
+```
+SVM Train error rate =  0.1678782
+SVM Test error rate =  0.1938776
+
+
+
+```{r}
+
+# ROC curve - Train
+pred <- prediction(as.numeric(yhat=='1'),as.numeric(train.white$quality.good=='1'))
+perf <- performance(pred,"tpr","fpr")
+plot(perf,colorize=T,lwd=2)
+abline(a=0,b=1)
+abline(h=1)
+abline(v=0)
+performance(pred,measure="auc")@y.values
+
+
+# ROC curve - Test
+pred <- prediction(as.numeric(test.yhat=='1'),as.numeric(test.white$quality.good=='1'))
+perf <- performance(pred,"tpr","fpr")
+plot(perf,colorize=T,lwd=2)
+abline(a=0,b=1)
+abline(h=1)
+abline(v=0)
+performance(pred,measure="auc")@y.values
+
+
+
+```
+
+
+
+
+## Bayes Classifiers
+```{r}
+# 10-fold cross validation
+set.seed(1200) 
+k <- 10 
+n <- dim(train.white)[1] # train.white is my complete cases data  
+ids <- sample(1:n,n) 
+ 
+i1 <- (0*(n/k)+1):(1*(n/k)) 
+i2 <- ((n/k)+1):(2*(n/k)) 
+i3 <- (2*(n/k)+1):(3*(n/k)) 
+i4 <- (3*(n/k)+1):(4*(n/k)) 
+i5 <- (4*(n/k)+1):(5*(n/k)) 
+i6 <- (5*(n/k)+1):(6*(n/k)) 
+i7 <- (6*(n/k)+1):(7*(n/k)) 
+i8 <- (7*(n/k)+1):(8*(n/k)) 
+i9 <- (8*(n/k)+1):(9*(n/k)) 
+i10 <- (9*(n/k)+1):(10*(n/k)) 
+ 
+v1 <- ids[i1]  # individuals selected for first validation data set  
+t1 <- ids[-i1] # individuals in the first training data set  
+t2 <- ids[-i2] 
+v2 <- ids[i2] 
+t3 <- ids[-i3] 
+v3 <- ids[i3] 
+t4 <- ids[-i4] 
+v4 <- ids[i4] 
+v5 <- ids[i5]  
+t5 <- ids[-i5] 
+t6 <- ids[-i6] 
+v6 <- ids[i6] 
+t7 <- ids[-i7] 
+v7 <- ids[i7] 
+t8 <- ids[-i8] 
+v8 <- ids[i8] 
+t9 <- ids[-i9] 
+v9 <- ids[i9] 
+t10 <- ids[-i10] 
+v10 <- ids[i10] 
+ 
+train1 <- train.white[t1,] # first training data set 
+val1 <- train.white[v1,] # first validation/test data set 
+
+train2 <- train.white[t2,] # second training data set 
+val2 <- train.white[v2,] # second validation/test data set 
+
+train3 <- train.white[t3,] # third training data set 
+val3 <- train.white[v3,] # third validation/test data set 
+
+train4 <- train.white[t4,] # fourth training data set 
+val4 <- train.white[v4,] # fourth validation/test data set 
+
+
+train5 <- train.white[t5,] # fifth training data set 
+val5 <- train.white[v5,] # fifth validation/test data set 
+
+train6 <- train.white[t6,] # sixth training data set 
+val6 <- train.white[v6,] # sixth validation/test data set 
+
+train7 <- train.white[t7,] # seventh training data set 
+val7 <- train.white[v7,] # seventh validation/test data set 
+
+train8 <- train.white[t8,] # eighth training data set 
+val8 <- train.white[v8,] # eighth validation/test data set 
+
+train9 <- train.white[t9,] # ninth training data set 
+val9 <- train.white[v9,] # ninth validation/test data set 
+
+train10 <- train.white[t10,] # tenth training data set 
+val10 <- train.white[v10,] # tenth validation/test data set 
+
+
+nrow(val1)
+
+#val1
+```
+
+
+Graphs observing largest associations between all predictors and response variable
+commented out for sake of not making a 200 page pdf after knitting
+```{r}
+# # 1st fold/training set
+# plot(train1$quality.good, train1$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train1')
+# plot(train1$quality.good, train1$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train1')
+# plot(train1$quality.good, train1$citric.acid, xlab = 'quality', ylab = 'citric.acid train1')
+# plot(train1$quality.good, train1$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train1')
+# plot(train1$quality.good, train1$chlorides, xlab = 'quality', ylab = 'chlorides train1')
+# plot(train1$quality.good, train1$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train1')
+# plot(train1$quality.good, train1$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train1')
+# plot(train1$quality.good, train1$density, xlab = 'quality', ylab = 'density train1')
+# plot(train1$quality.good, train1$pH, xlab = 'quality', ylab = 'pH train1')
+# plot(train1$quality.good, train1$sulphates, xlab = 'quality', ylab = 'sulphates train1')
+# plot(train1$quality.good, train1$alcohol, xlab = 'quality', ylab = 'alcohol train1')
+# 
+# # 2nd fold/training set
+# plot(train2$quality.good, train2$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train2')
+# plot(train2$quality.good, train2$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train2')
+# plot(train2$quality.good, train1$citric.acid, xlab = 'quality', ylab = 'citric.acid train2')
+# plot(train2$quality.good, train1$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train2')
+# plot(train2$quality.good, train1$chlorides, xlab = 'quality', ylab = 'chlorides train2')
+# plot(train2$quality.good, train1$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train2')
+# plot(train2$quality.good, train1$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train2')
+# plot(train2$quality.good, train1$density, xlab = 'quality', ylab = 'density train2')
+# plot(train2$quality.good, train1$pH, xlab = 'quality', ylab = 'pH train2')
+# plot(train2$quality.good, train1$sulphates, xlab = 'quality', ylab = 'sulphates train2')
+# plot(train2$quality.good, train1$alcohol, xlab = 'quality', ylab = 'alcohol train2')
+# 
+# # 3rd fold/training set
+# plot(train3$quality.good, train3$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train3')
+# plot(train3$quality.good, train3$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train3')
+# plot(train3$quality.good, train3$citric.acid, xlab = 'quality', ylab = 'citric.acid train3')
+# plot(train3$quality.good, train3$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train3')
+# plot(train3$quality.good, train3$chlorides, xlab = 'quality', ylab = 'chlorides train3')
+# plot(train3$quality.good, train3$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train3')
+# plot(train3$quality.good, train3$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train3')
+# plot(train3$quality.good, train3$density, xlab = 'quality', ylab = 'density train3')
+# plot(train3$quality.good, train3$pH, xlab = 'quality', ylab = 'pH train3')
+# plot(train3$quality.good, train3$sulphates, xlab = 'quality', ylab = 'sulphates train3')
+# plot(train3$quality.good, train3$alcohol, xlab = 'quality', ylab = 'alcohol train3')
+# 
+# # 4th fold/training set
+# plot(train4$quality.good, train4$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train4')
+# plot(train4$quality.good, train4$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train4')
+# plot(train4$quality.good, train4$citric.acid, xlab = 'quality', ylab = 'citric.acid train4')
+# plot(train4$quality.good, train4$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train4')
+# plot(train4$quality.good, train4$chlorides, xlab = 'quality', ylab = 'chlorides train4')
+# plot(train4$quality.good, train4$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train4')
+# plot(train4$quality.good, train4$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train4')
+# plot(train4$quality.good, train4$density, xlab = 'quality', ylab = 'density train4')
+# plot(train4$quality.good, train4$pH, xlab = 'quality', ylab = 'pH train4')
+# plot(train4$quality.good, train4$sulphates, xlab = 'quality', ylab = 'sulphates train4')
+# plot(train4$quality.good, train4$alcohol, xlab = 'quality', ylab = 'alcohol train4')
+# 
+# # 5th fold/training set
+# plot(train5$quality.good, train5$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train5')
+# plot(train5$quality.good, train5$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train5')
+# plot(train5$quality.good, train5$citric.acid, xlab = 'quality', ylab = 'citric.acid train5')
+# plot(train5$quality.good, train5$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train5')
+# plot(train5$quality.good, train5$chlorides, xlab = 'quality', ylab = 'chlorides train5')
+# plot(train5$quality.good, train5$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train5')
+# plot(train5$quality.good, train5$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train5')
+# plot(train5$quality.good, train5$density, xlab = 'quality', ylab = 'density train5')
+# plot(train5$quality.good, train5$pH, xlab = 'quality', ylab = 'pH train5')
+# plot(train5$quality.good, train5$sulphates, xlab = 'quality', ylab = 'sulphates train5')
+# plot(train5$quality.good, train5$alcohol, xlab = 'quality', ylab = 'alcohol train5')
+# 
+# # 6th fold/training set
+# plot(train6$quality.good, train6$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train6')
+# plot(train6$quality.good, train6$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train6')
+# plot(train6$quality.good, train6$citric.acid, xlab = 'quality', ylab = 'citric.acid train6')
+# plot(train6$quality.good, train6$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train6')
+# plot(train6$quality.good, train6$chlorides, xlab = 'quality', ylab = 'chlorides train6')
+# plot(train6$quality.good, train6$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train6')
+# plot(train6$quality.good, train6$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train6')
+# plot(train6$quality.good, train6$density, xlab = 'quality', ylab = 'density train6')
+# plot(train6$quality.good, train6$pH, xlab = 'quality', ylab = 'pH train6')
+# plot(train6$quality.good, train6$sulphates, xlab = 'quality', ylab = 'sulphates train6')
+# plot(train6$quality.good, train6$alcohol, xlab = 'quality', ylab = 'alcohol train6')
+# 
+# # 7th fold/training set
+# plot(train7$quality.good, train7$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train7')
+# plot(train7$quality.good, train7$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train7')
+# plot(train7$quality.good, train7$citric.acid, xlab = 'quality', ylab = 'citric.acid train7')
+# plot(train7$quality.good, train7$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train7')
+# plot(train7$quality.good, train7$chlorides, xlab = 'quality', ylab = 'chlorides train7')
+# plot(train7$quality.good, train7$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train7')
+# plot(train7$quality.good, train7$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train7')
+# plot(train7$quality.good, train7$density, xlab = 'quality', ylab = 'density train7')
+# plot(train7$quality.good, train7$pH, xlab = 'quality', ylab = 'pH train7')
+# plot(train7$quality.good, train7$sulphates, xlab = 'quality', ylab = 'sulphates train7')
+# plot(train7$quality.good, train7$alcohol, xlab = 'quality', ylab = 'alcohol train7')
+# 
+# # 8th fold/training set
+# plot(train8$quality.good, train8$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train8')
+# plot(train8$quality.good, train8$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train8')
+# plot(train8$quality.good, train8$citric.acid, xlab = 'quality', ylab = 'citric.acid train8')
+# plot(train8$quality.good, train8$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train8')
+# plot(train8$quality.good, train8$chlorides, xlab = 'quality', ylab = 'chlorides train8')
+# plot(train8$quality.good, train8$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train8')
+# plot(train8$quality.good, train8$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train8')
+# plot(train8$quality.good, train8$density, xlab = 'quality', ylab = 'density train8')
+# plot(train8$quality.good, train8$pH, xlab = 'quality', ylab = 'pH train8')
+# plot(train8$quality.good, train8$sulphates, xlab = 'quality', ylab = 'sulphates train8')
+# plot(train8$quality.good, train8$alcohol, xlab = 'quality', ylab = 'alcohol train8')
+# 
+# # 9th fold/training set
+# plot(train9$quality.good, train9$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train9')
+# plot(train9$quality.good, train9$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train9')
+# plot(train9$quality.good, train9$citric.acid, xlab = 'quality', ylab = 'citric.acid train9')
+# plot(train9$quality.good, train9$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train9')
+# plot(train9$quality.good, train9$chlorides, xlab = 'quality', ylab = 'chlorides train9')
+# plot(train9$quality.good, train9$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train9')
+# plot(train9$quality.good, train9$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train9')
+# plot(train9$quality.good, train9$density, xlab = 'quality', ylab = 'density train9')
+# plot(train9$quality.good, train9$pH, xlab = 'quality', ylab = 'pH train9')
+# plot(train9$quality.good, train9$sulphates, xlab = 'quality', ylab = 'sulphates train9')
+# plot(train9$quality.good, train9$alcohol, xlab = 'quality', ylab = 'alcohol train9')
+# 
+# # 10th fold/training set
+# plot(train10$quality.good, train10$fixed.acidity, xlab = 'quality', ylab = 'fixed.acidity train10')
+# plot(train10$quality.good, train10$volatile.acidity, xlab = 'quality', ylab = 'volatile.acidity train10')
+# plot(train10$quality.good, train10$citric.acid, xlab = 'quality', ylab = 'citric.acid train10')
+# plot(train10$quality.good, train10$residual.sugar, xlab = 'quality', ylab = 'residual.sugar train10')
+# plot(train10$quality.good, train10$chlorides, xlab = 'quality', ylab = 'chlorides train10')
+# plot(train10$quality.good, train10$free.sulfur.dioxide, xlab = 'quality', ylab = 'free.sulfur.dioxide train10')
+# plot(train10$quality.good, train10$total.sulfur.dioxide, xlab = 'quality', ylab = 'total.sulfur.dioxide train10')
+# plot(train10$quality.good, train10$density, xlab = 'quality', ylab = 'density train10')
+# plot(train10$quality.good, train10$pH, xlab = 'quality', ylab = 'pH train10')
+# plot(train10$quality.good, train10$sulphates, xlab = 'quality', ylab = 'sulphates train10')
+# plot(train10$quality.good, train10$alcohol, xlab = 'quality', ylab = 'alcohol train10')
+```
+
+
+
+```{r}
+# error rate of lda model for 1st train/val set
+lda.fit1 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train1)
+lda.yhat1 <- predict(lda.fit1,val1)
+lda.error.rate1 <- sum(lda.yhat1$class!=val1$quality.good)/dim(val1)[1]
+#lda.error.rate1
+
+
+# error rate of lda model for 2nd train/val set
+lda.fit2 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train2)
+lda.yhat2 <- predict(lda.fit2,val2)
+lda.error.rate2 <- sum(lda.yhat2$class!=val2$quality.good)/dim(val2)[1]
+#lda.error.rate2
+
+# error rate of lda model for 3rd train/val set
+lda.fit3 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train3)
+lda.yhat3 <- predict(lda.fit3,val3)
+lda.error.rate3 <- sum(lda.yhat3$class!=val3$quality.good)/dim(val3)[1]
+#lda.error.rate3
+
+
+# error rate of lda model for 4th train/val set
+lda.fit4 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train4)
+lda.yhat4 <- predict(lda.fit4,val4)
+lda.error.rate4 <- sum(lda.yhat4$class!=val4$quality.good)/dim(val4)[1]
+#lda.error.rate4
+
+
+# error rate of lda model for 5th train/val set
+lda.fit5 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train5)
+lda.yhat5 <- predict(lda.fit5,val5)
+lda.error.rate5 <- sum(lda.yhat5$class!=val5$quality.good)/dim(val5)[1]
+#lda.error.rate5
+
+
+# error rate of lda model for 6th train/val set
+lda.fit6 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train6)
+lda.yhat6 <- predict(lda.fit6,val6)
+lda.error.rate6 <- sum(lda.yhat6$class!=val6$quality.good)/dim(val6)[1]
+#lda.error.rate6
+
+# error rate of lda model for 7th train/val set
+lda.fit7 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train7)
+lda.yhat7 <- predict(lda.fit7,val7)
+lda.error.rate7 <- sum(lda.yhat7$class!=val7$quality.good)/dim(val7)[1]
+#lda.error.rate7
+
+
+# error rate of lda model for 8th train/val set
+lda.fit8 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train8)
+lda.yhat8 <- predict(lda.fit8,val8)
+lda.error.rate8 <- sum(lda.yhat8$class!=val8$quality.good)/dim(val8)[1]
+#lda.error.rate8
+
+
+# error rate of lda model for 9th train/val set
+lda.fit9 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train9)
+lda.yhat9 <- predict(lda.fit9,val9)
+lda.error.rate9 <- sum(lda.yhat9$class!=val9$quality.good)/dim(val9)[1]
+#lda.error.rate9
+
+
+# error rate of lda model for 10th train/val set
+lda.fit10 <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train10)
+lda.yhat10 <- predict(lda.fit10,val10)
+lda.error.rate10 <- sum(lda.yhat10$class!=val10$quality.good)/dim(val10)[1]
+#lda.error.rate10
+
+
+# overall lda train error rate
+lda.error.rate.overall <- (lda.error.rate1 + lda.error.rate2 + lda.error.rate3 + lda.error.rate4 + lda.error.rate5 + lda.error.rate6 + lda.error.rate7 + lda.error.rate8 + lda.error.rate9 + lda.error.rate10)/10
+lda.error.rate.overall
+
+# test error rate of lda model for full test set
+lda.fit.final <- lda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train.white)
+lda.yhat.final <- predict(lda.fit.final,test.white)
+lda.error.rate.final <- sum(lda.yhat.final$class!=test.white$quality.good)/dim(test.white)[1]
+lda.error.rate.final
+
+```
+
+
+```{r}
+# error rate of qda model for 1st train/val set
+qda.fit1 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train1)
+qda.yhat1 <- predict(qda.fit1,val1)
+qda.error.rate1 <- sum(qda.yhat1$class!=val1$quality.good)/dim(val1)[1]
+#qda.error.rate1
+
+
+# error rate of qda model for 2nd train/val set
+qda.fit2 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train2)
+qda.yhat2 <- predict(qda.fit2,val2)
+qda.error.rate2 <- sum(qda.yhat2$class!=val2$quality.good)/dim(val2)[1]
+#qda.error.rate2
+
+# error rate of qda model for 3rd train/val set
+qda.fit3 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train3)
+qda.yhat3 <- predict(qda.fit3,val3)
+qda.error.rate3 <- sum(qda.yhat3$class!=val3$quality.good)/dim(val3)[1]
+#qda.error.rate3
+
+
+# error rate of qda model for 4th train/val set
+qda.fit4 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train4)
+qda.yhat4 <- predict(qda.fit4,val4)
+qda.error.rate4 <- sum(qda.yhat4$class!=val4$quality.good)/dim(val4)[1]
+#qda.error.rate4
+
+
+# error rate of qda model for 5th train/val set
+qda.fit5 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train5)
+qda.yhat5 <- predict(qda.fit5,val5)
+qda.error.rate5 <- sum(qda.yhat5$class!=val5$quality.good)/dim(val5)[1]
+#qda.error.rate5
+
+
+# error rate of qda model for 6th train/val set
+qda.fit6 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train6)
+qda.yhat6 <- predict(qda.fit6,val6)
+qda.error.rate6 <- sum(qda.yhat6$class!=val6$quality.good)/dim(val6)[1]
+#qda.error.rate6
+
+# error rate of qda model for 7th train/val set
+qda.fit7 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train7)
+qda.yhat7 <- predict(qda.fit7,val7)
+qda.error.rate7 <- sum(qda.yhat7$class!=val7$quality.good)/dim(val7)[1]
+#qda.error.rate7
+
+
+# error rate of qda model for 8th train/val set
+qda.fit8 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train8)
+qda.yhat8 <- predict(qda.fit8,val8)
+qda.error.rate8 <- sum(qda.yhat8$class!=val8$quality.good)/dim(val8)[1]
+#qda.error.rate8
+
+
+# error rate of qda model for 9th train/val set
+qda.fit9 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train9)
+qda.yhat9 <- predict(qda.fit9,val9)
+qda.error.rate9 <- sum(qda.yhat9$class!=val9$quality.good)/dim(val9)[1]
+#qda.error.rate9
+
+
+# error rate of qda model for 10th train/val set
+qda.fit10 <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train10)
+qda.yhat10 <- predict(qda.fit10,val10)
+qda.error.rate10 <- sum(qda.yhat10$class!=val10$quality.good)/dim(val10)[1]
+#qda.error.rate10
+
+
+
+# overall qda train error rate
+qda.error.rate.overall <- (qda.error.rate1 + qda.error.rate2 + qda.error.rate3 + qda.error.rate4 + qda.error.rate5 + qda.error.rate6 + qda.error.rate7 + qda.error.rate8 + qda.error.rate9 + qda.error.rate10)/10
+qda.error.rate.overall
+
+# test error rate of qda model for full test set
+qda.fit.final <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train.white)
+qda.yhat.final <- predict(qda.fit.final,test.white)
+qda.error.rate.final <- sum(qda.yhat.final$class!=test.white$quality.good)/dim(test.white)[1]
+qda.error.rate.final
+```
+
+
+Remember to remove density from the Naive Bayes model to address the issue of multicolinearity
+```{r}
+# error rate of naiveBayes model for 1st train/val set
+naiveBayes.fit1 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train1)
+naiveBayes.yhat1 <- predict(naiveBayes.fit1,val1)
+naiveBayes.error.rate1 <- sum(naiveBayes.yhat1!=val1$quality.good)/dim(val1)[1]
+#naiveBayes.error.rate1
+
+
+
+# error rate of naiveBayes model for 2nd train/val set
+naiveBayes.fit2 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train2)
+naiveBayes.yhat2 <- predict(naiveBayes.fit2,val2)
+naiveBayes.error.rate2 <- sum(naiveBayes.yhat2!=val2$quality.good)/dim(val2)[1]
+#naiveBayes.error.rate2
+
+# error rate of naiveBayes model for 3rd train/val set
+naiveBayes.fit3 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train3)
+naiveBayes.yhat3 <- predict(naiveBayes.fit3,val3)
+naiveBayes.error.rate3 <- sum(naiveBayes.yhat3!=val3$quality.good)/dim(val3)[1]
+#naiveBayes.error.rate3
+
+
+# error rate of naiveBayes model for 4th train/val set
+naiveBayes.fit4 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train4)
+naiveBayes.yhat4 <- predict(naiveBayes.fit4,val4)
+naiveBayes.error.rate4 <- sum(naiveBayes.yhat4!=val4$quality.good)/dim(val4)[1]
+#naiveBayes.error.rate4
+
+
+# error rate of naiveBayes model for 5th train/val set
+naiveBayes.fit5 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train5)
+naiveBayes.yhat5 <- predict(naiveBayes.fit5,val5)
+naiveBayes.error.rate5 <- sum(naiveBayes.yhat5!=val5$quality.good)/dim(val5)[1]
+#naiveBayes.error.rate5
+
+
+# error rate of naiveBayes model for 6th train/val set
+naiveBayes.fit6 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train6)
+naiveBayes.yhat6 <- predict(naiveBayes.fit6,val6)
+naiveBayes.error.rate6 <- sum(naiveBayes.yhat6!=val6$quality.good)/dim(val6)[1]
+#naiveBayes.error.rate6
+
+# error rate of naiveBayes model for 7th train/val set
+naiveBayes.fit7 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train7)
+naiveBayes.yhat7 <- predict(naiveBayes.fit7,val7)
+naiveBayes.error.rate7 <- sum(naiveBayes.yhat7!=val7$quality.good)/dim(val7)[1]
+#naiveBayes.error.rate7
+
+
+# error rate of naiveBayes model for 8th train/val set
+naiveBayes.fit8 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train8)
+naiveBayes.yhat8 <- predict(naiveBayes.fit8,val8)
+naiveBayes.error.rate8 <- sum(naiveBayes.yhat8!=val8$quality.good)/dim(val8)[1]
+#naiveBayes.error.rate8
+
+
+# error rate of naiveBayes model for 9th train/val set
+naiveBayes.fit9 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train9)
+naiveBayes.yhat9 <- predict(naiveBayes.fit9,val9)
+naiveBayes.error.rate9 <- sum(naiveBayes.yhat9!=val9$quality.good)/dim(val9)[1]
+#naiveBayes.error.rate9
+
+
+# error rate of naiveBayes model for 10th train/val set
+naiveBayes.fit10 <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train10)
+naiveBayes.yhat10 <- predict(naiveBayes.fit10,val10)
+naiveBayes.error.rate10 <- sum(naiveBayes.yhat10!=val10$quality.good)/dim(val10)[1]
+#naiveBayes.error.rate10
+
+
+
+# overall naiveBayes train error rate
+naiveBayes.error.rate.overall <- (naiveBayes.error.rate1 + naiveBayes.error.rate2 + naiveBayes.error.rate3 + naiveBayes.error.rate4 + naiveBayes.error.rate5 + naiveBayes.error.rate6 + naiveBayes.error.rate7 + naiveBayes.error.rate8 + naiveBayes.error.rate9 + naiveBayes.error.rate10)/10
+naiveBayes.error.rate.overall
+
+# test error rate of naiveBayes model for full test set
+naiveBayes.fit.final <- naiveBayes(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity,train.white)
+naiveBayes.yhat.final <- predict(naiveBayes.fit.final,test.white)
+naiveBayes.error.rate.final <- sum(naiveBayes.yhat.final!=test.white$quality.good)/dim(test.white)[1]
+naiveBayes.error.rate.final
+
+```
+
+```{r}
+# qda is best lets do it on the test
+# test error rate of qda model for full test set
+qda.fit.final <- qda(quality.good~alcohol+total.sulfur.dioxide+volatile.acidity+density,train.white)
+qda.yhat.final <- predict(qda.fit.final,test.white)
+qda.error.rate.final <- sum(qda.yhat.final$class!=test.white$quality.good)/dim(test.white)[1]
+qda.error.rate.final
+
+```
+
+
+The Best of the Bayes Classifier methods was QDA, which had a test error rate of 0.2367347, but the best SVM  model had a Test error rate of  0.1938776; so the SVM performed the best of the classification models 
+
+
+
+
+
+
