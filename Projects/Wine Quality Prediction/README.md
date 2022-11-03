@@ -5,7 +5,7 @@
 
 #### Overview
 
-An R script that, given specific wine features, will predict the wine quality.
+An R script that, given 11 specific wine features, will predict the wine quality using 2 regression models and 2 classification models.
 
 ### Problem Statement
 
@@ -68,3 +68,6 @@ My entire dataset was obtained from:
 
 Other research came from:
 - ["Modeling wine preferences by data mining from physicochemical properties" by Paulo Cortez et al.](https://www.sciencedirect.com/science/article/abs/pii/S0167923609001377?via%3Dihub)
+
+More information about Vinho Verde (Porugese white wine):
+- [Vinho Verde Official Website](https://www.vinhoverde.pt/en/about-vinho-verde)
