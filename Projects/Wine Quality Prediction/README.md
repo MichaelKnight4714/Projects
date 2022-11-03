@@ -9,7 +9,7 @@ An R script that, given specific wine features, will predict the wine quality.
 
 ### Problem Statement
 
-For this project I decided to use [the Wine Quality Data Set](https://archive.ics.uci.edu/ml/datasets/Wine+Quality) for both a regression and a classification model set. The study sample data consists of 1,599 red wines and 4,898 white wines from the northwest region of Portugal (one of the top ten wine producing countries in the world), a type of wine known as Vinho Verde. This data was collected between May of 2004 to February of 2007. The overall goal of my analysis was to try to predict the quality of wine based on a set of objective quantitative variables; one binary and one base-10.
+For this project I decided to use data from [the Wine Quality Data Set](https://archive.ics.uci.edu/ml/datasets/Wine+Quality) for both a regression and a classification model set. The study sample data consists of 1,599 red wines and 4,898 white wines from the northwest region of Portugal (one of the top ten wine producing countries in the world), a type of wine known as Vinho Verde. This data was collected between May of 2004 to February of 2007. The overall goal of my analysis was to try to predict the quality of wine based on a set of 11 objective quantitative variables; one binary and one base-10.
 
 ### Executive Summary
 
